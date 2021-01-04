@@ -653,7 +653,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             else {
                 for (int binCount = 0; ; ++binCount) {
                     if ((e = p.next) == null) {
-                        //7.链表下一个节点是null，就new一个新节点写入到当前桶的后面，形成链表
+                        //7.尾插法，链表下一个节点是null（链表末尾），就new一个新节点写入到当前链表节点的后面
                         p.next = newNode(hash, key, value, null);
                         //8.判断是否大于阈值，需要链表转红黑树
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
