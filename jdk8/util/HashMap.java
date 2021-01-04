@@ -336,6 +336,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     static final int hash(Object key) {
         int h;
+        //为什么^ (h >>> 16) 更加散列 方便位运算
         return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
     }
 
@@ -609,6 +610,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      *         previously associated <tt>null</tt> with <tt>key</tt>.)
      */
     public V put(K key, V value) {
+        //把key先去hash一下拿到hash值
         return putVal(hash(key), key, value, false, true);
     }
 
@@ -624,64 +626,65 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     final V putVal(int hash, K key, V value, boolean onlyIfAbsent,
                    boolean evict) {
+
+        //数组+链表+红黑树，链表型（Node泛型)数组，每一个元素代表一条链表，则每个元素称为桶
+        //HashMap 的每一个元素，都是链表的一个节点（Entry<K,V>）这里也就是Node<K,V>
+
+        //tab:桶 p:桶 n:哈希表数组大小 i:数组下标(桶的位置)
         Node<K,V>[] tab; Node<K,V> p; int n, i;
-        //把table赋值给tab==null||对tab长度判空
+        //1.判断当前桶是否为空，空的就调用resize()方法（resize 中会判断是否进行初始化）
         if ((tab = table) == null || (n = tab.length) == 0)
-            //如果空或者长度0 则调resize()方法（此方法中调用初始化方法）
             n = (tab = resize()).length;
-        //把哈希表中对应的桶赋值给p并判空 (n - 1) & hash ?
+        //2.判断是否有hash冲突，根据入参key与key的hash值找到具体的桶并判空，空则无冲突 直接新建桶
+        //？为什么采用(n - 1) & hash计算数组下标，感兴趣的可以深入了解
         if ((p = tab[i = (n - 1) & hash]) == null)
-            //如果对应的桶为空 则新建一个
             tab[i] = newNode(hash, key, value, null);
+        //3.以下表示有冲突，处理hash冲突
         else {
-            //如果对应的桶不为null
-            Node<K,V> e; K k;
-            //在p桶中找到那个hash与key已存在的那个节点 再赋值给e
+            Node<K,V> e; K k;//均为临时变量
+            //4.判断当前桶的key是否与入参key一致，一致则存在，把当前桶p赋值给e,覆盖原 value 在步骤10进行
             if (p.hash == hash &&
                 ((k = p.key) == key || (key != null && key.equals(k))))
-                //如果p的hash值与key都相等 把p赋值给e
                 e = p;
+            //5.如果当前的桶为红黑树，用putTreeVal()方法写入 赋值给e
             else if (p instanceof TreeNode)
-                //如果p是TreeNode 则调用TreeNode的putTreeVal()方法保存 再赋值给e
                 e = ((TreeNode<K,V>)p).putTreeVal(this, tab, hash, key, value);
+            //6.则当前的桶是链表 遍历链表
             else {
-                //起个循环
                 for (int binCount = 0; ; ++binCount) {
-                    //把p.next赋值给e 判空
                     if ((e = p.next) == null) {
-                        //如果e为null 则新建节点 再赋值给p.next
+                        //7.链表下一个节点是null，就new一个新节点写入到当前桶的后面，形成链表
                         p.next = newNode(hash, key, value, null);
+                        //8.判断是否大于阈值，需要链表转红黑树
                         if (binCount >= TREEIFY_THRESHOLD - 1) // -1 for 1st
-                            //如果桶的数量大于等于8,添加进来变成了9，则需要树化桶
+                            //binCount从0开始的, 所以当binCount为7时，链表长度为8（算上数组槽位开始的那个节点，总长度为9），则需要树化桶
                             treeifyBin(tab, hash);
                         break;
                     }
-                    //如果e不为空
+                    //9.与步骤4一致，如果链表中key存在则直接跳出 步骤10覆盖原值
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
-                        //e的hash与key都能对上 跳出循环
                         break;
-                    //把e赋值给p
                     p = e;
                 }
             }
-            //如果这个e这个key存在映射 则修改它
+            //10.存在相同的key的Node节点,则覆盖原value
             if (e != null) { // existing mapping for key
-                //把e的值拿出来赋值到oldValue
                 V oldValue = e.value;
-                //onlyIfAbsent为true则不改变原来的值
-                //onlyIfAbsent为false 改变原来的值 || oldValue为null
+                //onlyIfAbsent为true：不改变原来的值 ；false： 改变原来的值
                 if (!onlyIfAbsent || oldValue == null)
-                    //把新值付给e.value
                     e.value = value;
-
+                //LinkedHashMap用到的回调方法
                 afterNodeAccess(e);
                 return oldValue;
             }
         }
+        //记录修改次数标识
         ++modCount;
+        //11.容量超过阈值，扩容
         if (++size > threshold)
             resize();
+        //LinkedHashMap用到的回调方法
         afterNodeInsertion(evict);
         return null;
     }
