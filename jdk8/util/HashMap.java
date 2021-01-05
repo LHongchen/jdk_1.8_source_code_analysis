@@ -568,14 +568,19 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     final Node<K,V> getNode(int hash, Object key) {
         Node<K,V>[] tab; Node<K,V> first, e; int n; K k;
+        //1、判断当前数组不为空并长度大于0 && 由key的hash值找到对应数组下的桶（可能是红黑树或者链表）
         if ((tab = table) != null && (n = tab.length) > 0 &&
             (first = tab[(n - 1) & hash]) != null) {
+            //2、先判断桶的第一个节点 如果key一致 返回
             if (first.hash == hash && // always check first node
                 ((k = first.key) == key || (key != null && key.equals(k))))
                 return first;
+            //3、再判空下一个节点不为空 && 判断是红黑树还算链表
             if ((e = first.next) != null) {
+                //4、如果是红黑树 则按红黑树方式取值
                 if (first instanceof TreeNode)
                     return ((TreeNode<K,V>)first).getTreeNode(hash, key);
+                //否则就是链表，遍历取值
                 do {
                     if (e.hash == hash &&
                         ((k = e.key) == key || (key != null && key.equals(k))))
@@ -602,6 +607,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * Associates the specified value with the specified key in this map.
      * If the map previously contained a mapping for the key, the old
      * value is replaced.
+     * //将指定的值与此映射中的指定键关联。如果该映射先前包含了该键的映射，则旧值将被替换。
      *
      * @param key key with which the specified value is to be associated
      * @param value value to be associated with the specified key
