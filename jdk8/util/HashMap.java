@@ -336,7 +336,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      */
     static final int hash(Object key) {
         int h;
-        //为什么^ (h >>> 16) 更加散列 方便位运算
+        //为什么^ (h >>> 16) 更加散列,性能考量，方便位运算
+        //方便在put,get方法中(n - 1) & hash计算数组下标
         return (key == null) ? 0 : (h = key.hashCode()) ^ (h >>> 16);
     }
 
@@ -679,7 +680,11 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                 return oldValue;
             }
         }
-        //记录修改次数标识
+         /*记录修改次数标识
+         用于fast-fail，由于HashMap非线程安全，在对HashMap进行迭代时，
+         如果期间其他线程的参与导致HashMap的结构发生变化了（比如put，remove等操作），
+         需要抛出异常ConcurrentModificationException
+         */
         ++modCount;
         //11.容量超过阈值，扩容
         if (++size > threshold)
