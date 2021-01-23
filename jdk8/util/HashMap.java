@@ -232,6 +232,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
 
     /**
      * The default initial capacity - MUST be a power of two.
+     * 初始容量大小 必须是2的次幂
      */
     static final int DEFAULT_INITIAL_CAPACITY = 1 << 4; // aka 16
 
@@ -239,11 +240,14 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * The maximum capacity, used if a higher value is implicitly specified
      * by either of the constructors with arguments.
      * MUST be a power of two <= 1<<30.
+     * 最大的容量大小
+     * 超过这个值就将threshold修改为Integer.MAX_VALUE，数组不进行扩容
      */
     static final int MAXIMUM_CAPACITY = 1 << 30;
 
     /**
      * The load factor used when none specified in constructor.
+     * 负载因子 为什么是0.75？因为统计学中hash冲突符合泊松分布，7-8之间冲突最小
      */
     static final float DEFAULT_LOAD_FACTOR = 0.75f;
 
@@ -254,6 +258,8 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * than 2 and should be at least 8 to mesh with assumptions in
      * tree removal about conversion back to plain bins upon
      * shrinkage.
+     * 链表大于这个值就会树化
+     * 注意：树化并不是整个map链表，而是某一个大于此阈值的链表
      */
     static final int TREEIFY_THRESHOLD = 8;
 
@@ -261,6 +267,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * The bin count threshold for untreeifying a (split) bin during a
      * resize operation. Should be less than TREEIFY_THRESHOLD, and at
      * most 6 to mesh with shrinkage detection under removal.
+     * 小于这个值就会反树化
      */
     static final int UNTREEIFY_THRESHOLD = 6;
 
@@ -446,6 +453,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * @throws IllegalArgumentException if the initial capacity is negative
      *         or the load factor is nonpositive
      */
+    //指定初始容量大小，负载因子
     public HashMap(int initialCapacity, float loadFactor) {
         if (initialCapacity < 0)
             throw new IllegalArgumentException("Illegal initial capacity: " +
@@ -456,6 +464,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
             throw new IllegalArgumentException("Illegal load factor: " +
                                                loadFactor);
         this.loadFactor = loadFactor;
+        //tableSizeFor这个方法用于找到大于等于initialCapacity的最小的2的幂
         this.threshold = tableSizeFor(initialCapacity);
     }
 
@@ -466,6 +475,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * @param  initialCapacity the initial capacity.
      * @throws IllegalArgumentException if the initial capacity is negative.
      */
+    //其实调用了上边的构造方法 负载因子给的默认值0.75
     public HashMap(int initialCapacity) {
         this(initialCapacity, DEFAULT_LOAD_FACTOR);
     }
@@ -474,6 +484,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
      * Constructs an empty <tt>HashMap</tt> with the default initial capacity
      * (16) and the default load factor (0.75).
      */
+    //空参构造，均使用默认值
     public HashMap() {
         this.loadFactor = DEFAULT_LOAD_FACTOR; // all other fields defaulted
     }
@@ -714,21 +725,27 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         int oldCap = (oldTab == null) ? 0 : oldTab.length;
         int oldThr = threshold;
         int newCap, newThr = 0;
+        //1、原数组扩容
         if (oldCap > 0) {
+            //如果原数组长度大于最大容量，把阈值调最大，return
             if (oldCap >= MAXIMUM_CAPACITY) {
                 threshold = Integer.MAX_VALUE;
                 return oldTab;
             }
+            //把原数组大小、阈值都扩大一倍
             else if ((newCap = oldCap << 1) < MAXIMUM_CAPACITY &&
                      oldCap >= DEFAULT_INITIAL_CAPACITY)
                 newThr = oldThr << 1; // double threshold
         }
+        //使用了指定initialCapacity的构造方法，则用原阈值作为新容量
         else if (oldThr > 0) // initial capacity was placed in threshold
             newCap = oldThr;
+        //使用空参构造，用默认值
         else {               // zero initial threshold signifies using defaults
-            newCap = DEFAULT_INITIAL_CAPACITY;
-            newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);
+            newCap = DEFAULT_INITIAL_CAPACITY;//16
+            newThr = (int)(DEFAULT_LOAD_FACTOR * DEFAULT_INITIAL_CAPACITY);//0.75*16=12
         }
+        //使用了指定initialCapacity的构造方法，新阈值为0，则计算新的阈值
         if (newThr == 0) {
             float ft = (float)newCap * loadFactor;
             newThr = (newCap < MAXIMUM_CAPACITY && ft < (float)MAXIMUM_CAPACITY ?
@@ -736,23 +753,34 @@ public class HashMap<K,V> extends AbstractMap<K,V>
         }
         threshold = newThr;
         @SuppressWarnings({"rawtypes","unchecked"})
+        //2、用新的数组容量大小初始化数组
         Node<K,V>[] newTab = (Node<K,V>[])new Node[newCap];
+        //如果仅仅是初始化过程,到此结束 return newTab
         table = newTab;
+        //3、开始扩容的主要工作，数据迁移
         if (oldTab != null) {
+            //遍历原数组开始复制旧数据
             for (int j = 0; j < oldCap; ++j) {
                 Node<K,V> e;
                 if ((e = oldTab[j]) != null) {
-                    oldTab[j] = null;
+                    oldTab[j] = null;//清除旧表引有
+                    //原数组中单个元素，直接复制到新表
                     if (e.next == null)
                         newTab[e.hash & (newCap - 1)] = e;
+                    //如果该元素类型是红黑树，按红黑树方式处理
                     else if (e instanceof TreeNode)
                         ((TreeNode<K,V>)e).split(this, newTab, j, oldCap);
                     else { // preserve order
+                        //这段代码设计巧妙，环环相扣啊
+                        //先定义了两种类型的链表 以及头尾节点 高位链表与低位链表
                         Node<K,V> loHead = null, loTail = null;
                         Node<K,V> hiHead = null, hiTail = null;
                         Node<K,V> next;
+                        //按顺序遍历原链表的节点
                         do {
                             next = e.next;
+                            //这是一个核心的判断条件，感兴趣的可以深入了解？为什么这么做
+                            //=0则放到低位链表
                             if ((e.hash & oldCap) == 0) {
                                 if (loTail == null)
                                     loHead = e;
@@ -760,6 +788,7 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                                     loTail.next = e;
                                 loTail = e;
                             }
+                            //否则放到高位链表
                             else {
                                 if (hiTail == null)
                                     hiHead = e;
@@ -767,11 +796,14 @@ public class HashMap<K,V> extends AbstractMap<K,V>
                                     hiTail.next = e;
                                 hiTail = e;
                             }
+                            //以上实际上就是对原来链表拆分成了两个高低位链表
                         } while ((e = next) != null);
+                        //把整个低位链表放到新数组的j位置
                         if (loTail != null) {
                             loTail.next = null;
                             newTab[j] = loHead;
                         }
+                        //把整个高位链表放到新数组的j+oldCap位置上
                         if (hiTail != null) {
                             hiTail.next = null;
                             newTab[j + oldCap] = hiHead;
